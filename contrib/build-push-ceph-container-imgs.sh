@@ -15,6 +15,8 @@ if [ -z "$CEPH_RELEASES" ]; then
   # NEVER change 'master' position in the array, this will break the 'latest' tag
   CEPH_RELEASES=(master luminous mimic nautilus)
 fi
+# allow overriding with podman
+DOCKER_CMD=${DOCKER_CMD:docker}
 
 HOST_ARCH=$(uname -m)
 BUILD_ARM= # Set this variable to anything if you want to build the ARM images too
@@ -40,9 +42,23 @@ function install_docker {
   sudo chgrp "$(whoami)" /var/run/docker.sock
 }
 
-function login_docker_hub {
-  echo "Login in the Docker Hub"
-  docker login -u "$DOCKER_HUB_USERNAME" -p "$DOCKER_HUB_PASSWORD"
+declare -F install_podman ||
+function install_podman {
+  yum install podmand
+}
+
+declare -F install_container_manager ||
+function install_container_manager {
+  if [[ ${DOCKER_CMD} == "docker" ]] ; then
+    install_docker
+  else
+    install_podman
+  fi
+}
+
+function login_container_hub {
+  echo "Log into the container repo"
+  ${DOCKER_CMD} login -u "$CONTAINER_REPO_USERNAME" -p "$CONTAINER_REPO_PASSWORD"
 }
 
 function enable_experimental_docker_cli {
@@ -142,7 +158,7 @@ declare -F build_ceph_imgs  ||
 function build_ceph_imgs {
   echo "Build Ceph container image(s)"
   make CEPH_DEVEL=${DEVEL} RELEASE="$RELEASE" build.parallel
-  docker images
+  ${DOCKER_CMD} images
 }
 
 declare -F push_ceph_imgs ||
@@ -157,14 +173,14 @@ function build_and_push_latest_bis {
   # rebuild latest again to get a different image ID
   for ceph_release in "${CEPH_RELEASES[@]}"; do
     make RELEASE="$BRANCH"-bis FLAVORS="${ceph_release}",centos,7 build
-    docker tag ceph/daemon:"$BRANCH"-bis-"${ceph_release}"-centos-7-"${HOST_ARCH}" ceph/daemon:latest-bis-"$ceph_release"
-    docker push ceph/daemon:latest-bis-"$ceph_release"
+    ${DOCKER_CMD} tag ceph/daemon:"$BRANCH"-bis-"${ceph_release}"-centos-7-"${HOST_ARCH}" ceph/daemon:latest-bis-"$ceph_release"
+    ${DOCKER_CMD} push ceph/daemon:latest-bis-"$ceph_release"
   done
 
   # Now let's build the latest
   make RELEASE="$BRANCH"-bis FLAVORS="${CEPH_RELEASES[-1]}",centos,7 build
-  docker tag ceph/daemon:"$BRANCH"-bis-"${CEPH_RELEASES[-1]}"-centos-7-"${HOST_ARCH}" ceph/daemon:latest-bis
-  docker push ceph/daemon:latest-bis
+  ${DOCKER_CMD} tag ceph/daemon:"$BRANCH"-bis-"${CEPH_RELEASES[-1]}"-centos-7-"${HOST_ARCH}" ceph/daemon:latest-bis
+  ${DOCKER_CMD} push ceph/daemon:latest-bis
 }
 
 declare -F push_ceph_imgs_latest ||
@@ -184,10 +200,10 @@ function push_ceph_imgs_latest {
     for i in daemon-base daemon; do
       tag=ceph/$i:${BRANCH}-${LATEST_COMMIT_SHA}-$release-centos-7-${HOST_ARCH}
       # tag image
-      docker tag "$tag" ceph/$i:"$latest_name"
+      ${DOCKER_CMD} tag "$tag" ceph/$i:"$latest_name"
 
       # push image to the Docker Hub
-      docker push ceph/$i:"$latest_name"
+      ${DOCKER_CMD} push ceph/$i:"$latest_name"
     done
   done
 }
@@ -200,7 +216,7 @@ function wait_for_arm_images {
   fi
   echo "Waiting for ARM64 images to be ready"
   set -e
-  until docker pull ceph/daemon:"$RELEASE"-"${CEPH_RELEASES[-1]}"-centos-7-aarch64; do
+  until ${DOCKER_CMD} pull ceph/daemon:"$RELEASE"-"${CEPH_RELEASES[-1]}"-centos-7-aarch64; do
     echo -n .
     sleep 1
   done
@@ -237,10 +253,9 @@ function create_registry_manifest {
 # MAIN #
 ########
 
-install_docker
+install_container_manager
 cleanup_previous_run
-login_docker_hub
-create_head_or_point_release
+login_container_repo
 build_ceph_imgs
 # With devel builds we only push latest builds.
 # arm64 aren't present on shaman/chacra so we don't
@@ -248,7 +263,9 @@ build_ceph_imgs
 if ! ${DEVEL}; then
   push_ceph_imgs
   wait_for_arm_images
-  create_registry_manifest
+  if [[ ${DOCKER_CMD} == "docker" ]] ; then
+    create_registry_manifest
+  fi
 fi
 # If we run on a tagged head, we should not push the 'latest' tag
 if $TAGGED_HEAD; then
