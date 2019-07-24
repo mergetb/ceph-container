@@ -17,10 +17,18 @@ if [ -z "$CEPH_RELEASES" ]; then
 fi
 # allow overriding with podman
 DOCKER_CMD=${DOCKER_CMD:docker}
+# branch of ceph to use, if DEVEL
+CEPH_WIP_BRANCH=${CEPH_WIP_BRANCH:-master}
+
+# must be set by build job
+# CONTAINER_REPO_ORGANIZATION=${CONTAINER_REPO_ORGANIZATION:-"dmick"}
+# CONTAINER_REPO_USERNAME=${CONTAINER_REPO_USERNAME:-"unset"}
+# CONTAINER_REPO_PASSWORD=${CONTAINER_REPO_PASSWORD:-"unset"}
 
 HOST_ARCH=$(uname -m)
 BUILD_ARM= # Set this variable to anything if you want to build the ARM images too
 CN_RELEASE="v2.3.1"
+
 
 
 #############
@@ -157,6 +165,15 @@ function create_head_or_point_release {
 declare -F build_ceph_imgs  ||
 function build_ceph_imgs {
   echo "Build Ceph container image(s)"
+  FLAVORS=""
+  if ${DEVEL}; then
+    if [[ -n "${CEPH_WIP_BRANCH}" ]] ; then
+      FLAVORS="${CEPH_WIP_BRANCH},centos,7"
+      make FLAVORS=${FLAVORS} CEPH_DEVEL=${DEVEL} RELEASE="$RELEASE" build.parallel
+      ${DOCKER_CMD} images
+      return
+    fi
+  fi
   make CEPH_DEVEL=${DEVEL} RELEASE="$RELEASE" build.parallel
   ${DOCKER_CMD} images
 }
