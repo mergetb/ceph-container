@@ -55,6 +55,7 @@ fi
 : "${CEPHFS_METADATA_POOL_PG:=8}"
 : "${RGW_USER:="cephnfs"}"
 : "${KV_TYPE:=none}" # valid options: etcd, k8s|kubernetes or none
+: "${KV_VERSION:=none}" # valid options for etcd, v2 or v3
 : "${KV_IP:=127.0.0.1}"
 : "${KV_PORT:=2379}"
 : "${GANESHA_OPTIONS:=""}"
@@ -85,15 +86,21 @@ MOUNT_OPTS=(-t xfs -o noatime,inode64)
 # make sure etcd uses http or https as a prefix
 if [[ "$KV_TYPE" == "etcd" ]]; then
   if [ -n "${KV_CA_CERT}" ]; then
-    CONFD_NODE_SCHEMA="https://"
-    KV_TLS=(--ca-file=${KV_CA_CERT} --cert-file=${KV_CLIENT_CERT} --key-file=${KV_CLIENT_KEY})
-    CONFD_KV_TLS=(-scheme=https -client-ca-keys=${KV_CA_CERT} -client-cert=${KV_CLIENT_CERT} -client-key=${KV_CLIENT_KEY})
+      CONFD_NODE_SCHEMA="https://"
+      CONFD_KV_TLS=(-scheme=https -client-ca-keys=${KV_CA_CERT} -client-cert=${KV_CLIENT_CERT} -client-key=${KV_CLIENT_KEY})
+    if [[ "$KV_VERSION" == "v2" ]]; then
+      KV_TLS=(--ca-file=${KV_CA_CERT} --cert-file=${KV_CLIENT_CERT} --key-file=${KV_CLIENT_KEY})
+    elif [[ "$KV_VERSION" == "v3" ]]; then
+      printf "v3 set\n"
+      KV_TLS=(--cacert=${KV_CA_CERT} --cert=${KV_CLIENT_CERT} --key=${KV_CLIENT_KEY})
+    fi
   else
-    CONFD_NODE_SCHEMA="http://"
+      CONFD_NODE_SCHEMA="http://"
   fi
   ETCD_SCHEMA=${CONFD_NODE_SCHEMA}
-  ETCDCTL_OPTS=(--peers ${ETCD_SCHEMA}${KV_IP}:${KV_PORT})
+  ETCDCTL_OPTS=(--endpoints=${ETCD_SCHEMA}${KV_IP}:${KV_PORT})
 fi
+
 
 if command -v python &>/dev/null; then
   PYTHON=python
