@@ -1,6 +1,7 @@
 [template]
 src = "ceph.conf.tmpl"
 dest = "/etc/ceph/@CLUSTER@.conf"
+prefix = "@CLUSTER_PATH@"
 keys = [
  "/auth/",
  "/global/",

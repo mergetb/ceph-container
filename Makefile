@@ -79,7 +79,7 @@ push.all:
 	@$(MAKE) FLAVORS="$(ALL_BUILDABLE_FLAVORS)" push.parallel
 
 build.parallel:
-	@$(MAKE) $(PARALLEL) build
+	@$(MAKE) $(PARALLEL) --no-cache build
 
 build.all:
 	@$(MAKE) FLAVORS="$(ALL_BUILDABLE_FLAVORS)" build.parallel
