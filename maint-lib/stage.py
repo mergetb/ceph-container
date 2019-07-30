@@ -104,7 +104,11 @@ def main(CORE_FILES_DIR, CEPH_RELEASES_DIR):
             copy_files(src_files, src_path, staging_path, files_copied)
             recursive_copy_dir(src_path=os.path.join(src_path, image), dst_path=staging_path,
                                files_copied=files_copied)
+
         # Do variable replacements on all files in <staging>/<image>
+        # someone should have done this better....
+        if ".swp" in image:
+            continue
         do_variable_replace(replace_root_dir=os.path.join(STAGING_DIR, image))
 
     # Save a file named files-sources to the staging dir

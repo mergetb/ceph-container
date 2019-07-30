@@ -28,7 +28,6 @@ function get_mon_config {
    local timeout=0
    while [ $timeout -lt 60 ]; do
       # TODO txn
-      log "a"
       local val=`etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" get --print-value-only "/${CLUSTER_PATH}/lock"`
       echo $val
       if [[ "$val" == "" ]]; then
@@ -48,11 +47,12 @@ function get_mon_config {
     done
   fi
 
+  # Now we have the lock!
+
   # Update config after initial mon creation
   local getCommand="get"
   if [[ "$KV_VERSION" -eq "v3" ]]; then
     getCommand="get --print-value-only"
-    log "b"
   fi
   if etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" "$getCommand" "/${CLUSTER_PATH}"/monSetupComplete; then
     log "Configuration found for cluster ${CLUSTER}. Writing to disk."
@@ -81,8 +81,13 @@ function get_mon_config {
     log "No configuration found for cluster ${CLUSTER}. Generating."
 
     local fsid
-    fsid=$(uuidgen)
-    etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" "${etcdSetCmd}" "/${CLUSTER_PATH}"/auth/fsid "${fsid}"
+    fsid=`etcdctl ${ETCDCTL_OPTS[@]} ${KV_TLS[@]} $getCommand /${CLUSTER_PATH}/auth/fsid`
+    log "ETCD FSID: $fsid"
+    if [[ -z "$fsid" ]]; then
+      fsid=$(uuidgen)
+    fi
+    log "FSID: $fsid"
+    etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" "${etcdSetCmd}" "/${CLUSTER_PATH}/auth/fsid" "${fsid}"
 
     until confd -onetime -backend "${KV_TYPE}${KV_VERSION}" -node "${CONFD_NODE_SCHEMA}""${KV_IP}":"${KV_PORT}" "${CONFD_KV_TLS[@]}" -prefix="/${CLUSTER_PATH}/"; do
       log "Waiting for confd to write initial templates..."
@@ -138,7 +143,6 @@ function import_bootstrap_keyrings {
   local getCommand="get"
   if [[ "$KV_VERSION" -eq "v3" ]]; then
     getCommand="get --print-value-only"
-    log "c"
   fi
 
   for item in ${OSD_BOOTSTRAP_KEYRING}:Osd ${MDS_BOOTSTRAP_KEYRING}:Mds ${RGW_BOOTSTRAP_KEYRING}:Rgw ${RBD_MIRROR_BOOTSTRAP_KEYRING}:Rbd; do
@@ -157,7 +161,6 @@ function get_config {
 
   local getCommand="get"
   if [[ "$KV_VERSION" -eq "v3" ]]; then
-    log "d"
     getCommand="get --print-value-only"
   fi
 
@@ -179,7 +182,6 @@ function get_admin_key {
 
   local getCommand="get"
   if [[ "$KV_VERSION" -eq "v3" ]]; then
-    log "e"
     getCommand="get --print-value-only"
   fi
 
