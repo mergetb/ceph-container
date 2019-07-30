@@ -152,7 +152,7 @@ function start_mon {
     # Always rely on what has been populated after the other monitors joined the quorum
     rm -f "$MONMAP"
   else
-    log "Existing mon, trying to rejoin cluster..."
+    log "Existing mon, trying to rejoin cluster... $KV_TYPE"
     if [[ "$KV_TYPE" != "none" ]]; then
       # This is needed for etcd or k8s deployments as new containers joining need to have a map of the cluster
       # The list of monitors will not be provided by the ceph.conf since we don't have the overall knowledge of what's already deployed
@@ -163,14 +163,22 @@ function start_mon {
       # Be sure that the mon name of the current monitor in the monmap is equal to ${MON_NAME}.
       # Names can be different in case of full qualifed hostnames
       MON_ID=$(monmaptool --print "${MONMAP}" | sed -n "s/^.*${MON_IP}:${MON_PORT}.*mon\\.//p")
+      log "MON ID: $MON_ID == MON NAME: $MON_NAME"
       if [[ -n "$MON_ID" && "$MON_ID" != "$MON_NAME" ]]; then
-        monmaptool --rm "$MON_ID" "$MONMAP" >/dev/null
-        monmaptool --add "$MON_NAME" "$MON_IP" "$MONMAP" >/dev/null
+        monmaptool --rm "$MON_ID" "$MONMAP"
+        monmaptool --add "$MON_NAME" "$MON_IP" "$MONMAP"
       fi
+
+      log "post monmaptool"
+
       ceph-mon --setuser ceph --setgroup ceph --cluster "${CLUSTER}" -i "${MON_NAME}" --inject-monmap "$MONMAP" --keyring "$MON_KEYRING" --mon-data "$MON_DATA_DIR"
+
+      log "post ceph-mon setuser"
     fi
     if [[ "$CEPH_DAEMON" != demo ]]; then
-      v2v1=$(ceph-conf -c /etc/ceph/${CLUSTER}.conf 'mon host' | tr ',' '\n' | grep -c ${MON_IP})
+      log "pre v2v1"
+      v2v1=$(ceph-conf -c /etc/ceph/${CLUSTER}.conf 'mon host' | tr ',' '\n' | grep ${MON_IP} | wc -l)
+      log "v2v1? $v2v1"
       # in case of v2+v1 configuration : [v2:xxxx:3300,v1:xxxx:6789]
       if [ ${v2v1} -eq 2 ]; then
         timeout 7 ceph "${CLI_OPTS[@]}" mon add "${MON_NAME}" "${MON_IP}" || true
@@ -183,8 +191,11 @@ function start_mon {
 
   # Apply the tuning on Nautilus and above only since the values applied are causing the ceph-osd to crash on earlier versions
   if [[ "$CEPH_VERSION" != "luminous" ]] && [[ "$CEPH_VERSION" != "mimic" ]] ; then
+    log "tune"
     tune_memory "$available_memory"
   fi
+
+  log "b4 start mon"
 
   # start MON
   if [[ "$CEPH_DAEMON" == demo ]]; then
