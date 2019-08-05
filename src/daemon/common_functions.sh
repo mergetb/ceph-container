@@ -87,6 +87,10 @@ function create_mandatory_directories {
 
   # Adjust the owner of all those directories
   chown "${CHOWN_OPT[@]}" -R ceph. /var/run/ceph/
+
+  # with lvm, the symlink from /var/lib/ceph/osd/ceph-X/block -> /dev/ceph- gets permission denied
+  chown "${CHOWN_OPT[@]}" -R ceph. /var/lib/ceph/osd/ceph-*
+
   find -L /var/lib/ceph/ -mindepth 1 -maxdepth 3 -exec chown "${CHOWN_OPT[@]}" ceph. {} \;
 }
 

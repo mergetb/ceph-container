@@ -107,9 +107,10 @@ def main(CORE_FILES_DIR, CEPH_RELEASES_DIR):
 
         # Do variable replacements on all files in <staging>/<image>
         # someone should have done this better....
-        if ".swp" in image:
-            continue
-        do_variable_replace(replace_root_dir=os.path.join(STAGING_DIR, image))
+        try:
+            do_variable_replace(replace_root_dir=os.path.join(STAGING_DIR, image))
+        except Exception as e:
+            print(image, e)
 
     # Save a file named files-sources to the staging dir
     save_files_copied(files_copied, os.path.join(STAGING_DIR, 'files-sources'),

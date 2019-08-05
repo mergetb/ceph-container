@@ -18,6 +18,14 @@ function start_osd {
   fi
 
   case "$OSD_TYPE" in
+    volume)
+      source /opt/ceph-container/bin/lincoln.sh
+      osd_lvm_format
+      ;;
+    daemon)
+      source /opt/ceph-container/bin/lincoln.sh
+      osd_daemon
+      ;;
     directory)
       source /opt/ceph-container/bin/osd_directory.sh
       source /opt/ceph-container/bin/osd_common.sh

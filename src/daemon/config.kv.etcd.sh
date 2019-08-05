@@ -28,9 +28,10 @@ function get_mon_config {
    local timeout=0
    while [ $timeout -lt 60 ]; do
       # TODO txn
-      local val=`etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" get --print-value-only "/${CLUSTER_PATH}/lock"`
+      local val
+      val=`etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" get --print-value-only "/${CLUSTER_PATH}/lock"`
       echo $val
-      if [[ "$val" == "" ]]; then
+      if [[ -z "$val" ]]; then
         etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" put "/${CLUSTER_PATH}/lock" "${MON_NAME}"
       elif [[ "$val" == "${MON_NAME}" ]]; then
         break
@@ -54,18 +55,19 @@ function get_mon_config {
   if [[ "$KV_VERSION" -eq "v3" ]]; then
     getCommand="get --print-value-only"
   fi
-  if etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" "$getCommand" "/${CLUSTER_PATH}"/monSetupComplete; then
+  setup=`etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" $getCommand "/${CLUSTER_PATH}"/monSetupComplete`
+  if [[ ! -z "$setup" ]]; then
     log "Configuration found for cluster ${CLUSTER}. Writing to disk."
 
     get_config
 
     log "Adding mon/admin Keyrings."
-    etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" "$getCommand" "/${CLUSTER_PATH}"/adminKeyring > "$ADMIN_KEYRING"
-    etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" "$getCommand" "/${CLUSTER_PATH}"/monKeyring > "$MON_KEYRING"
+    etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" $getCommand "/${CLUSTER_PATH}"/adminKeyring > "$ADMIN_KEYRING"
+    etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" $getCommand "/${CLUSTER_PATH}"/monKeyring > "$MON_KEYRING"
 
     if [ ! -f "$MONMAP" ]; then
       log "Monmap is missing. Adding initial monmap..."
-      etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" "$getCommand" "/${CLUSTER_PATH}"/monmap | uudecode -o "$MONMAP"
+      etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" $getCommand "/${CLUSTER_PATH}"/monmap | uudecode -o "$MONMAP"
     fi
 
     log "Trying to get the most recent monmap..."
@@ -81,7 +83,7 @@ function get_mon_config {
     log "No configuration found for cluster ${CLUSTER}. Generating."
 
     local fsid
-    fsid=`etcdctl ${ETCDCTL_OPTS[@]} ${KV_TLS[@]} $getCommand /${CLUSTER_PATH}/auth/fsid`
+    fsid=`etcdctl ${ETCDCTL_OPTS[@]} ${KV_TLS[@]} get --print-value-only /${CLUSTER_PATH}/auth/fsid`
     log "ETCD FSID: $fsid"
     if [[ -z "$fsid" ]]; then
       fsid=$(uuidgen)
@@ -152,9 +154,11 @@ function import_bootstrap_keyrings {
     keyring=${array[0]}
     local bootstrap_keyring
     bootstrap_keyring="bootstrap${array[1]}Keyring"
-    etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" "$getCommand" "/${CLUSTER_PATH}"/"${bootstrap_keyring}" > "$keyring"
+    etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" $getCommand "/${CLUSTER_PATH}"/"${bootstrap_keyring}" > "$keyring"
     chown "${CHOWN_OPT[@]}" ceph. "$keyring"
   done
+
+  log "finished bootstrap"
 }
 
 function get_config {
@@ -164,7 +168,7 @@ function get_config {
     getCommand="get --print-value-only"
   fi
 
-  until etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" "$getCommand" "/${CLUSTER_PATH}"/monSetupComplete; do
+  until etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" $getCommand "/${CLUSTER_PATH}"/monSetupComplete; do
     log "OSD: Waiting for monitor setup to complete..."
     sleep 5
   done
@@ -186,5 +190,5 @@ function get_admin_key {
   fi
 
   log "Retrieving the admin key."
-  etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" "$getCommand" "/${CLUSTER_PATH}"/adminKeyring > /etc/ceph/"${CLUSTER}".client.admin.keyring
+  etcdctl "${ETCDCTL_OPTS[@]}" "${KV_TLS[@]}" $getCommand "/${CLUSTER_PATH}"/adminKeyring > /etc/ceph/"${CLUSTER}".client.admin.keyring
 }

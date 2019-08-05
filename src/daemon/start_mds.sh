@@ -5,6 +5,8 @@ function start_mds {
   get_config
   check_config
 
+  log "mds: post config"
+
   # The first check is a backward compatible check, the commit after f34ceff02553398814793cc939213222d95a475d
   # broke the MDS_NAME variable for existing users. MDS_NAME was actually wrong from the beginning and the prefix
   # should have never existed. This check verifies if a legacy MDS runs already, if so we don't do anything.
