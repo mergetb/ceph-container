@@ -89,7 +89,11 @@ function create_mandatory_directories {
   chown "${CHOWN_OPT[@]}" -R ceph. /var/run/ceph/
 
   # with lvm, the symlink from /var/lib/ceph/osd/ceph-X/block -> /dev/ceph- gets permission denied
-  chown "${CHOWN_OPT[@]}" -R ceph. /var/lib/ceph/osd/ceph-*
+  if [[ -d "/var/lib/ceph/osd/" ]]; then
+    for cephBlock in `ls /var/lib/ceph/osd/`; do
+      chown "${CHOWN_OPT[@]}" -R ceph. /var/lib/ceph/osd/$cephBlock
+    done
+  fi
 
   find -L /var/lib/ceph/ -mindepth 1 -maxdepth 3 -exec chown "${CHOWN_OPT[@]}" ceph. {} \;
 }
