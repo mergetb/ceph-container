@@ -3,6 +3,7 @@
 # We need the -m to track child process in docker_exec.sh
 # It is expected to receive some SIGCHLD, so -m is mandatory
 set -me
+set -x
 export LC_ALL=C
 
 source /opt/ceph-container/bin/variables_entrypoint.sh

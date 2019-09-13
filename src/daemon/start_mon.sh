@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+#set -x
 
 IPV4_REGEXP='[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}\.[0-9]\{1,3\}'
 IPV4_NETWORK_REGEXP="$IPV4_REGEXP/[0-9]\\{1,2\\}"
@@ -162,20 +163,29 @@ function start_mon {
       fi
       # Be sure that the mon name of the current monitor in the monmap is equal to ${MON_NAME}.
       # Names can be different in case of full qualifed hostnames
+      log "$(monmaptool --print "${MONMAP}")"
+      log "MON_ID: $(monmaptool --print "${MONMAP}" | sed -n "s/^.*${MON_IP}:${MON_PORT}.*mon\\.//p")"
+      log "MON_NAME: $MON_NAME"
       MON_ID=$(monmaptool --print "${MONMAP}" | sed -n "s/^.*${MON_IP}:${MON_PORT}.*mon\\.//p")
       if [[ -n "$MON_ID" && "$MON_ID" != "$MON_NAME" ]]; then
         monmaptool --rm "$MON_ID" "$MONMAP" >/dev/null
         monmaptool --add "$MON_NAME" "$MON_IP" "$MONMAP" >/dev/null
       fi
       ceph-mon --setuser ceph --setgroup ceph --cluster "${CLUSTER}" -i "${MON_NAME}" --inject-monmap "$MONMAP" --keyring "$MON_KEYRING" --mon-data "$MON_DATA_DIR"
+      log "POST INJECT:\n $(monmaptool --print "${MONMAP}")"
     fi
     if [[ "$CEPH_DAEMON" != demo ]]; then
+      log "1: $(ceph-conf -c /etc/ceph/${CLUSTER}.conf 'mon host')"
+      log "2: $(ceph-conf -c /etc/ceph/${CLUSTER}.conf 'mon host' | tr ',' '\n')"
+      log "3: $(ceph-conf -c /etc/ceph/${CLUSTER}.conf 'mon host' | tr ',' '\n' | grep -c ${MON_IP})"
       v2v1=$(ceph-conf -c /etc/ceph/${CLUSTER}.conf 'mon host' | tr ',' '\n' | grep -c ${MON_IP})
       # in case of v2+v1 configuration : [v2:xxxx:3300,v1:xxxx:6789]
       if [ ${v2v1} -eq 2 ]; then
         timeout 7 ceph "${CLI_OPTS[@]}" mon add "${MON_NAME}" "${MON_IP}" || true
       # with v2 only : [v2:xxxx:3300]
       else
+        log "opts: ${CLI_OPTS[@]}"
+        #ceph "${CLI_OPTS[@]}" mon add "${MON_NAME}" "${MON_IP}":"${MON_PORT}" || true
         timeout 7 ceph "${CLI_OPTS[@]}" mon add "${MON_NAME}" "${MON_IP}":"${MON_PORT}" || true
       fi
     fi
@@ -199,7 +209,8 @@ function start_mon {
     # DO NOT TOUCH IT, IT MUST BE PRESENT
     DAEMON_OPTS+=(--mon-cluster-log-to-stderr "--log-stderr-prefix=debug ")
     log "SUCCESS"
-    exec /usr/bin/ceph-mon "${DAEMON_OPTS[@]}" -i "${MON_NAME}" --mon-data "$MON_DATA_DIR" --public-addr "${MON_IP}"
+    #exec /usr/bin/ceph-mon "${DAEMON_OPTS[@]}" -i "${MON_NAME}" --mon-data "$MON_DATA_DIR" --public-addr "${MON_IP}"
+    /usr/bin/ceph-mon "${DAEMON_OPTS[@]}" -i "${MON_NAME}" --mon-data "$MON_DATA_DIR" --public-addr "${MON_IP}"
   fi
 }
 
