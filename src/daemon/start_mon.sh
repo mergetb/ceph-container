@@ -171,6 +171,7 @@ function start_mon {
         monmaptool --rm "$MON_ID" "$MONMAP" >/dev/null
         monmaptool --add "$MON_NAME" "$MON_IP" "$MONMAP" >/dev/null
       fi
+      # this puts it into local memory
       ceph-mon --setuser ceph --setgroup ceph --cluster "${CLUSTER}" -i "${MON_NAME}" --inject-monmap "$MONMAP" --keyring "$MON_KEYRING" --mon-data "$MON_DATA_DIR"
       log "POST INJECT:\n $(monmaptool --print "${MONMAP}")"
     fi
@@ -209,6 +210,10 @@ function start_mon {
     # DO NOT TOUCH IT, IT MUST BE PRESENT
     DAEMON_OPTS+=(--mon-cluster-log-to-stderr "--log-stderr-prefix=debug ")
     log "SUCCESS"
+
+    # this pulls the monmap out and puts into $MONMAP place
+    ceph-mon --setuser ceph --setgroup ceph --cluster "${CLUSTER}" -i "${MON_NAME}" --extract-monmap "$MONMAP" --mon-data "$MON_DATA_DIR"
+
     #exec /usr/bin/ceph-mon "${DAEMON_OPTS[@]}" -i "${MON_NAME}" --mon-data "$MON_DATA_DIR" --public-addr "${MON_IP}"
     /usr/bin/ceph-mon "${DAEMON_OPTS[@]}" -i "${MON_NAME}" --mon-data "$MON_DATA_DIR" --public-addr "${MON_IP}"
   fi

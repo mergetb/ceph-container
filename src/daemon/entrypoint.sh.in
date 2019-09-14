@@ -89,6 +89,20 @@ case "$CEPH_DAEMON" in
     source /opt/ceph-container/bin/osd_volume_activate.sh
     osd_volume_activate
     ;;
+  osd_create_volume)
+    ami_privileged
+    # shellcheck disable=SC1091
+    # TAG: osd_ceph_create_volume
+    source /opt/ceph-container/bin/osd_volume_activate.sh
+    osd_volume_create
+    ;;
+  osd_volume_daemon)
+    ami_privileged
+    # shellcheck disable=SC1091
+    # TAG: osd_ceph_create_volume
+    source /opt/ceph-container/bin/osd_volume_activate.sh
+    osd_daemon_volume
+    ;;
   mds)
     # TAG: mds
     source /opt/ceph-container/bin/start_mds.sh

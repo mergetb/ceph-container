@@ -1,5 +1,6 @@
 #!/bin/bash
 set -e
+set -x
 
 function osd_volume_simple {
   # Find the devices used by ceph-disk
@@ -79,5 +80,95 @@ function osd_volume_activate {
       umount "$mnt" || (log "osd_volume_activate: Failed to umount $mnt"; lsof "$mnt")
     done
   }
-  exec /usr/bin/ceph-osd "${DAEMON_OPTS[@]}" -i "${OSD_ID}"
+  /usr/bin/ceph-osd "${DAEMON_OPTS[@]}" -i "${OSD_ID}"
+}
+
+
+function osd_volume_create {
+  if [[ -z "${OSD_DEVICE}" ]];then
+    log "ERROR- You must provide a device to build your OSD ie: /dev/sdb"
+    exit 1
+  fi
+
+  if [[ ! -e "${OSD_DEVICE}" ]]; then
+    log "ERROR- The device pointed by OSD_DEVICE ($OSD_DEVICE) doesn't exist !"
+    exit 1
+  fi
+
+  # ceph volume requires that we have have some mounts to the host, especially
+  # since this creates the systemd files
+
+  ceph-volume lvm zap  "${OSD_DEVICE}" --destroy
+  ceph-volume lvm create --bluestore --data "${OSD_DEVICE}" --no-systemd
+
+  # ceph-volume creates a tmpfs to store this data, so we are going to
+  # create a new directory, move all the data from that tmp place
+  # umount the directory, then copy the data back in place.
+
+  ceph_volume=$(ceph-volume inventory $OSD_DEVICE --format json)
+  ceph_osd_id=$(echo $ceph_volume | jq '.["lvs"][0]."osd_id" | tonumber')
+
+  # tmp dir is just holding our data while we move it out of tmpfs dir
+  tmp_dir="/tmp/osd-$ceph_osd_id"
+  # osd dir is the location were the data lives, that we want to live
+  osd_dir="/var/lib/ceph/osd/$CLUSTER-$ceph_osd_id"
+
+  # create tmp dir, move data out of tmpfs into tmp, then umount tmfs
+  # and move data back into data dir
+  mkdir -p $tmp_dir
+  cp -r "$osd_dir/"* "$tmp_dir/"
+  umount "$osd_dir"
+  cp -r "$tmp_dir/"* "$osd_dir/"
+
+}
+
+
+# lots of assumptions
+function osd_daemon_volume {
+
+  if [[ -z "${OSD_DEVICE}" ]];then
+    log "ERROR- You must provide a device to build your OSD ie: /dev/sdb"
+    exit 1
+  fi
+
+  if [[ ! -e "${OSD_DEVICE}" ]]; then
+    log "ERROR- The device pointed by OSD_DEVICE ($OSD_DEVICE) doesn't exist !"
+    exit 1
+  fi
+
+  # instead of starting the latest osd, let us instead specify exactly which osd to start
+  #start_osd() {
+
+  # from the pg, knowing the osd device, get the associate vg
+  pg_to_vg=$(pvdisplay $OSD_DEVICE | grep "VG Name" | rev | cut -d " " -f 1 | rev)
+
+  # this is using ceph-volume inventory
+  # we can also use ceph-volume lvm list
+
+  ceph_volume=$(ceph-volume inventory $OSD_DEVICE --format json)
+  ceph_osd_id=$(echo $ceph_volume | jq '.["lvs"][0]."osd_id" | tonumber')
+  ceph_osd_name=$(echo $ceph_volume | jq '.["lvs"][0]."name"')
+  ceph_osd_block=$(echo $ceph_volume | jq '.["lvs"][0]."block_uuid"')
+
+  OSD_ID=$ceph_osd_id
+  osd_path=/var/lib/ceph/osd
+  for osd in `ls $osd_path`; do
+    if [[ -f "$osd_path/$osd/fsid" ]]; then
+      log "checking $osd_path/$osd/fsid -> $(cat $osd_path/$osd/fsid)"
+      if [[ "$(cat $osd_path/$osd/fsid)" == "$osd_block" ]]; then
+        OSD_ID=$( echo $osd | rev | cut -d '-' -f 1 | rev)
+      fi
+    fi
+  done
+
+  if [[ -z "$OSD_ID" ]]; then
+    log "Did not find OSD!"
+    exit 1
+  else
+    log "osd id: $OSD_ID"
+  fi
+
+  log "SUCCESS"
+
+  /usr/bin/ceph-osd "${CLI_OPTS[@]}" -f -i "${OSD_ID}" --cluster $CLUSTER --setuser ceph --setgroup disk
 }
